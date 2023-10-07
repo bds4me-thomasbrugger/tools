@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSV Upload und gestapeltes Balkendiagramm</title>
+    <style>
+        canvas {
+            max-width: 800px;
+            max-height: 400px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        #dropArea {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+</head>
+<body>
+    <div id="dropArea">
+        <p>CSV-Dateien hier ablegen</p>
+    </div>
+    <canvas id="chartCanvas"></canvas>
+    <table id="dataTable">
+        <tr>
+            <th></th>
+            <th>Ja</th>
+            <th>Nein</th>
+            <th>Widerruf</th>
+        </tr>
+        <tr>
+            <td>Absolut</td>
+            <td id="jaCount"></td>
+            <td id="neinCount"></td>
+            <td id="widerrufCount"></td>
+        </tr>
+        <tr>
+            <td>Prozent</td>
+            <td id="jaPercent"></td>
+            <td id="neinPercent"></td>
+            <td id="widerrufPercent"></td>
+        </tr>
+    </table>
+
+    <script>
+        let chartData = {
+            labels: [],
+            datasets: [{
+                label: 'Ja',
+                data: [],
+                backgroundColor: 'rgba(75, 192, 192, 0.8)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            }, {
+                label: 'Nein',
+                data: [],
+                backgroundColor: 'rgba(255, 99, 132, 0.8)',
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 1
+            }, {
+                label: 'Widerruf',
+                data: [],
+                backgroundColor: 'rgba(255, 255, 0, 0.8)',
+                borderColor: 'rgba(255, 255, 0, 1)',
+                borderWidth: 1
+            }]
+        };
+
+        let chartOptions = {
+            scales: {
+                x: {
+                    stacked: true,
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1,
+                        font: {
+                            size: 12
+                        }
+                    },
+                },
+            },
+
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        font: {
+                            size: 14
+                        }
+                    }
+                },
+            },
+        };
+
+        let chart;
+
+        const dropArea = document.getElementById('dropArea');
+        const chartCanvas = document.getElementById('chartCanvas');
+        const dataTable = document.getElementById('dataTable');
+        const jaCount = document.getElementById('jaCount');
+        const neinCount = document.getElementById('neinCount');
+        const widerrufCount = document.getElementById('widerrufCount');
+        const jaPercent = document.getElementById('jaPercent');
+        const neinPercent = document.getElementById('neinPercent');
+        const widerrufPercent = document.getElementById('widerrufPercent');
+
+        chartCanvas.height = 800; // Ändern Sie diese Höhe nach Bedarf
+
+        // Funktion zum Verhindern des Standardverhaltens bei Drag-and-Drop
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Funktion zum Verarbeiten von hochgeladenen Dateien
+        function handleFiles(files) {
+            for (const file of files) {
+                Papa.parse(file, {
+                    header: true,
+                    dynamicTyping: true,
+                    delimiter: ';',
+                    complete: function(results) {
+                        const data = results.data;
+
+                        for (const row of data) {
+                            const aboStatus = row['Abo vorhanden'];
+                            const monthYear = `${row['Jahr']} ${row['Monat']}`;
+
+                            if (!chartData.labels.includes(monthYear)) {
+                                chartData.labels.push(monthYear);
+                                chartData.datasets[0].data.push(0);
+                                chartData.datasets[1].data.push(0);
+                                chartData.datasets[2].data.push(0);
+                            }
+
+                            const dataIndex = chartData.labels.indexOf(monthYear);
+                            if (aboStatus === 'ja') {
+                                chartData.datasets[0].data[dataIndex]++;
+                            } else if (aboStatus === 'nein') {
+                                chartData.datasets[1].data[dataIndex]++;
+                            } else if (aboStatus === 'Widerruf') {
+                                chartData.datasets[2].data[dataIndex]++;
+                            }
+                        }
+
+                        chartData.labels.sort((a, b) => new Date(a) - new Date(b));
+
+                        updateChart();
+                        updateTable();
+                    }
+                });
+            }
+        }
+
+        // Funktion zur Aktualisierung des Diagramms
+        function updateChart() {
+            const ctx = chartCanvas.getContext('2d');
+
+            if (!chart) {
+                chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: chartData,
+                    options: chartOptions,
+                });
+            } else {
+                chart.data = chartData;
+                chart.update();
+            }
+        }
+
+        // Funktion zur Aktualisierung der Tabelle
+        function updateTable() {
+            const jaTotal = chartData.datasets[0].data.reduce((acc, value) => acc + value, 0);
+            const neinTotal = chartData.datasets[1].data.reduce((acc, value) => acc + value, 0);
+            const widerrufTotal = chartData.datasets[2].data.reduce((acc, value) => acc + value, 0);
+            const total = jaTotal + neinTotal + widerrufTotal;
+
+            jaCount.textContent = jaTotal;
+            neinCount.textContent = neinTotal;
+            widerrufCount.textContent = widerrufTotal;
+
+            jaPercent.textContent = `${((jaTotal / total) * 100).toFixed(2)}%`;
+            neinPercent.textContent = `${((neinTotal / total) * 100).toFixed(2)}%`;
+            widerrufPercent.textContent = `${((widerrufTotal / total) * 100).toFixed(2)}%`;
+        }
+
+        // Eventlistener für Drag-and-Drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+
+        // Highlighten des Drop-Bereichs beim Überfahren
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.style.background = 'rgba(0, 0, 0, 0.1)';
+            }, false);
+        });
+
+        // Zurücksetzen des Drop-Bereichs nach Verlassen oder Ablegen
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.style.background = '';
+            }, false);
+        });
+
+        // Dateien verarbeiten, wenn sie abgelegt werden
+        dropArea.addEventListener('drop', (e) => {
+            const droppedFiles = e.dataTransfer.files;
+            handleFiles(droppedFiles);
+        }, false);
+
+
+        let pieChart;
+
+function createPieChart(data) {
+    const ctx = document.getElementById('pieChartCanvas').getContext('2d');
+    
+    if (!pieChart) {
+        pieChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Ja', 'Nein', 'Widerruf'],
+                datasets: [{
+                    data: data,
+                    backgroundColor: [
+                        'rgba(75, 192, 192, 0.8)',
+                        'rgba(255, 99, 132, 0.8)',
+                        'rgba(255, 255, 0, 0.8)'
+                    ],
+                    borderColor: [
+                        'rgba(75, 192, 192, 1)',
+                        'rgba(255, 99, 132, 1)',
+                        'rgba(255, 255, 0, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            font: {
+                                size: 14
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        pieChart.data.datasets[0].data = data;
+        pieChart.update();
+    }
+}
+
+// In Ihrer handleFiles-Funktion, rufen Sie createPieChart mit den aktualisierten Daten auf.
+// Fügen Sie dies am Ende Ihrer handleFiles-Funktion hinzu:
+const jaTotal = chartData.datasets[0].data.reduce((acc, value) => acc + value, 0);
+const neinTotal = chartData.datasets[1].data.reduce((acc, value) => acc + value, 0);
+const widerrufTotal = chartData.datasets[2].data.reduce((acc, value) => acc + value, 0);
+
+const pieChartData = [jaTotal, neinTotal, widerrufTotal];
+createPieChart(pieChartData);
+
+    </script>
+</body>
+</html>
